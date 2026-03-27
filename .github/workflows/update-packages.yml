@@ -1,0 +1,117 @@
+name: Update tracked packages
+
+on:
+  schedule:
+    - cron: '0 8 */5 * *' # Every 5 days at 8am UTC
+  workflow_dispatch:
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Sync fork master with upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/83noit/nixpkgs/merge-upstream \
+            --method POST \
+            --field branch=master
+
+  update:
+    needs: sync-upstream
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: ttdl
+            repo: VladimirMarkelov/ttdl
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Check version and existing PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PKG="${{ matrix.package }}"
+          LATEST=$(gh release view --repo "${{ matrix.repo }}" --json tagName --jq '.tagName | ltrimstr("v")')
+          BRANCH="${PKG}-${LATEST}"
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+          PKG_FILE="pkgs/by-name/${PKG:0:2}/${PKG}/package.nix"
+          CURRENT=$(grep -oP 'version\s*=\s*"\K[^"]+' "$PKG_FILE")
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+
+          if [[ "$CURRENT" == "$LATEST" ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Already at $LATEST, nothing to do."
+            exit 0
+          fi
+
+          PR=$(gh pr list --repo NixOS/nixpkgs --head "${BRANCH}" --state open --json number --jq '.[0].number')
+          if [[ -n "$PR" ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "PR #${PR} already open for ${BRANCH}, nothing to do."
+          fi
+
+      - uses: cachix/install-nix-action@ba0dd844c9180cbf77aa72a116d6fbc515d0e87b # v27
+        if: steps.check.outputs.skip != 'true'
+
+      - name: Configure git
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update ${{ matrix.package }}
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          nix run nixpkgs#nix-update -- --version "${{ steps.check.outputs.latest }}" ${{ matrix.package }}
+
+      - name: Format changed files
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          git diff --name-only | grep '\.nix$' | xargs nix run nixpkgs#nixfmt --
+
+      - name: Commit and push branch
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          OLD="${{ steps.check.outputs.current }}"
+          NEW="${{ steps.check.outputs.latest }}"
+          BRANCH="${{ steps.check.outputs.branch }}"
+
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -m "${{ matrix.package }}: ${OLD} -> ${NEW}"
+          git push origin "$BRANCH" --force
+
+      - name: Open draft PR on NixOS/nixpkgs
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OLD="${{ steps.check.outputs.current }}"
+          NEW="${{ steps.check.outputs.latest }}"
+          BRANCH="${{ steps.check.outputs.branch }}"
+          PKG="${{ matrix.package }}"
+
+          printf '%s\n\nChangelog: %s\n\n## Things done\n\n- Built on platform:\n  - [x] x86_64-linux\n' \
+            "${PKG}: ${OLD} -> ${NEW}" \
+            "https://github.com/${{ matrix.repo }}/releases/tag/v${NEW}" > /tmp/pr-body.md
+
+          gh pr create \
+            --repo NixOS/nixpkgs \
+            --draft \
+            --title "${PKG}: ${OLD} -> ${NEW}" \
+            --body-file /tmp/pr-body.md \
+            --base master \
+            --head "83noit:$BRANCH"
