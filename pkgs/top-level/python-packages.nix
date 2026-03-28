@@ -4146,6 +4146,8 @@ self: super: with self; {
 
   django-currentuser = callPackage ../development/python-modules/django-currentuser { };
 
+  django-dbbackup = callPackage ../development/python-modules/django-dbbackup { };
+
   django-debug-toolbar = callPackage ../development/python-modules/django-debug-toolbar { };
 
   django-dynamic-preferences =
@@ -6898,6 +6900,8 @@ self: super: with self; {
 
   hatasmota = callPackage ../development/python-modules/hatasmota { };
 
+  hatch = callPackage ../development/python-modules/hatch/default.nix { };
+
   hatch-autorun = callPackage ../development/python-modules/hatch-autorun { };
 
   hatch-babel = callPackage ../development/python-modules/hatch-babel { };
@@ -9015,12 +9019,8 @@ self: super: with self; {
 
   llama-index-core = callPackage ../development/python-modules/llama-index-core { };
 
-  llama-index-embeddings-gemini =
-    callPackage ../development/python-modules/llama-index-embeddings-gemini
-      { };
-
-  llama-index-embeddings-google =
-    callPackage ../development/python-modules/llama-index-embeddings-google
+  llama-index-embeddings-google-genai =
+    callPackage ../development/python-modules/llama-index-embeddings-google-genai
       { };
 
   llama-index-embeddings-huggingface =
@@ -13960,6 +13960,8 @@ self: super: with self; {
 
   pyinstrument = callPackage ../development/python-modules/pyinstrument { };
 
+  pyintelliclima = callPackage ../development/python-modules/pyintelliclima { };
+
   pyinterp = callPackage ../development/python-modules/pyinterp { };
 
   pyintesishome = callPackage ../development/python-modules/pyintesishome { };
@@ -15577,6 +15579,8 @@ self: super: with self; {
   python-didl-lite = callPackage ../development/python-modules/python-didl-lite { };
 
   python-digitalocean = callPackage ../development/python-modules/python-digitalocean { };
+
+  python-discovery = callPackage ../development/python-modules/python-discovery { };
 
   python-djvulibre = callPackage ../development/python-modules/python-djvulibre { };
 
